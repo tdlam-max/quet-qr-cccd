@@ -13,7 +13,7 @@
 
     body {
       margin:0;
-      padding:16px;
+      padding:14px;
       background:#f1f5f9;
       font-family:Arial,sans-serif;
       color:#172033;
@@ -21,7 +21,7 @@
 
     .container {
       max-width:560px;
-      margin:18px auto;
+      margin:15px auto;
       padding:20px;
       background:white;
       border-radius:15px;
@@ -40,7 +40,7 @@
       color:#64748b;
       font-size:14px;
       line-height:1.5;
-      margin-bottom:17px;
+      margin-bottom:15px;
     }
 
     #reader {
@@ -53,13 +53,23 @@
 
     #reader video {
       width:100% !important;
-      object-fit:cover !important;
+      object-fit:contain !important;
+      border-radius:12px;
+    }
+
+    #imageReader {
+      position:fixed;
+      left:-10000px;
+      top:0;
+      width:320px;
+      height:320px;
+      overflow:hidden;
     }
 
     select, input, button {
       width:100%;
       padding:13px;
-      margin-top:12px;
+      margin-top:11px;
       border-radius:9px;
       font-size:16px;
     }
@@ -78,11 +88,13 @@
     }
 
     button:disabled {
-      opacity:.55;
+      opacity:.5;
       cursor:not-allowed;
     }
 
     .stop { background:#b91c1c; }
+    .capture { background:#15803d; }
+    .choose { background:#7c3aed; }
     .manual { background:#475569; }
 
     #status {
@@ -112,6 +124,34 @@
       font-size:12px;
       line-height:1.5;
     }
+
+    .section-title {
+      margin-top:18px;
+      font-weight:bold;
+      color:#334155;
+      font-size:14px;
+    }
+
+    .divider {
+      margin-top:20px;
+      border:0;
+      border-top:1px solid #e2e8f0;
+    }
+
+    .tip {
+      margin-top:12px;
+      padding:11px;
+      background:#eff6ff;
+      color:#1e40af;
+      border-radius:9px;
+      font-size:12px;
+      line-height:1.5;
+    }
+
+    @media(max-width:400px) {
+      .container { padding:14px; }
+      h2 { font-size:19px; }
+    }
   </style>
 </head>
 
@@ -122,35 +162,61 @@
   <h2>QUÉT MÃ QR CCCD</h2>
 
   <div class="note">
-    Đưa mã QR trên thẻ CCCD vào giữa khung hình.<br>
-    Hệ thống tự nhận diện và chuyển sang trang tra cứu phát bằng.
+    Đưa mã QR trên thẻ CCCD vào khung camera.<br>
+    Có thể quét trực tiếp hoặc chụp ảnh để đọc mã.
   </div>
 
   <div id="reader"></div>
 
   <select id="cameraSelect">
-    <option value="">Tự động chọn camera</option>
+    <option value="">Tự động chọn camera sau</option>
   </select>
 
   <button id="startBtn" onclick="startScan()">
-    MỞ CAMERA
+    MỞ CAMERA - QUÉT LIÊN TỤC
   </button>
 
-  <button id="stopBtn" class="stop" onclick="stopScan()" disabled>
+  <button id="captureBtn" class="capture"
+          onclick="captureAndRead()" disabled>
+    CHỤP ẢNH - TỰ ĐỌC QR
+  </button>
+
+  <button id="stopBtn" class="stop"
+          onclick="stopScan()" disabled>
     DỪNG CAMERA
+  </button>
+
+  <input
+    type="file"
+    id="imageInput"
+    accept="image/*"
+    capture="environment"
+    hidden
+  >
+
+  <button class="choose" onclick="chooseImage()">
+    CHỌN ẢNH CCCD ĐỂ ĐỌC QR
   </button>
 
   <div id="status">
     Nhấn MỞ CAMERA để bắt đầu quét.
   </div>
 
-  <hr style="margin-top:20px;border:0;border-top:1px solid #e2e8f0">
+  <div class="tip">
+    <b>Mẹo:</b> Nếu camera khó nhận mã, hãy đưa CCCD gần camera hơn,
+    giữ thẻ thẳng, tránh ánh sáng phản chiếu. Có thể nhấn
+    CHỤP ẢNH để hệ thống đọc QR từ ảnh.
+  </div>
+
+  <hr class="divider">
+
+  <div class="section-title">TRA CỨU THỦ CÔNG</div>
 
   <input
     id="manualId"
     inputmode="numeric"
     maxlength="12"
-    placeholder="Hoặc nhập số CCCD gồm 12 chữ số"
+    placeholder="Nhập số CCCD gồm 12 chữ số"
   >
 
   <button class="manual" onclick="submitManual()">
@@ -159,22 +225,28 @@
 
   <div class="small">
     Trang quét QR hoạt động độc lập với Google Apps Script.
-    Khi quét thành công, mã CCCD được gửi bằng POST về ứng dụng quản lý phát bằng.
+    Khi nhận diện thành công, mã CCCD được gửi về ứng dụng
+    quản lý phát bằng. Ảnh được xử lý ngay trên thiết bị,
+    không tải ảnh CCCD lên máy chủ.
   </div>
 
 </div>
+
+<div id="imageReader"></div>
 
 <form id="sendForm" method="POST" style="display:none">
   <input type="hidden" name="id" id="sendId">
 </form>
 
 <script>
-  // DÁN ĐƯỜNG DẪN WEB APP APPS SCRIPT CÓ ĐUÔI /exec VÀO ĐÂY.
-  const GAS_EXEC_URL = 'https://script.google.com/macros/s/AKfycbywXvRGwJxCMw8FDcrMQWJ0LRPDjwKJn8zwG6MCaxEz1Jj6QOR7brTNF7LvnFRA2XtbBA/exec';
+  // ĐƯỜNG DẪN WEB APP APPS SCRIPT
+  const GAS_EXEC_URL =
+    'https://script.google.com/macros/s/AKfycbywXvRGwJxCMw8FDcrMQWJ0LRPDjwKJn8zwG6MCaxEz1Jj6QOR7brTNF7LvnFRA2XtbBA/exec';
 
   let scanner = null;
   let scanning = false;
   let submitting = false;
+  let processingImage = false;
   let cameras = [];
 
   const $ = id => document.getElementById(id);
@@ -198,11 +270,11 @@
       oscillator.connect(gain);
       gain.connect(ctx.destination);
 
-      oscillator.frequency.value = 1000;
-      gain.gain.value = 0.12;
+      oscillator.frequency.value = 1100;
+      gain.gain.value = 0.15;
 
       oscillator.start();
-      oscillator.stop(ctx.currentTime + 0.15);
+      oscillator.stop(ctx.currentTime + 0.18);
 
       oscillator.onended = () => ctx.close();
 
@@ -212,9 +284,9 @@
   function extractId(text) {
     const value = String(text || '').trim();
 
-    // QR CCCD thường có cấu trúc:
-    // 12 số CCCD | ngày sinh | giới tính | địa chỉ | ...
-    const firstPart = value.split(/[|;]/)[0].replace(/\D/g, '');
+    const firstPart = value
+      .split(/[|;]/)[0]
+      .replace(/\D/g, '');
 
     if (/^\d{12}$/.test(firstPart)) {
       return firstPart;
@@ -262,8 +334,14 @@
     }
   }
 
+  function updateCameraButtons() {
+    $('startBtn').disabled = scanning || submitting || processingImage;
+    $('stopBtn').disabled = !scanning;
+    $('captureBtn').disabled = !scanning || submitting || processingImage;
+  }
+
   async function startScan() {
-    if (scanning || submitting) return;
+    if (scanning || submitting || processingImage) return;
 
     if (!window.isSecureContext) {
       setStatus(
@@ -282,7 +360,6 @@
     }
 
     $('startBtn').disabled = true;
-    $('stopBtn').disabled = true;
 
     try {
       if (!scanner) {
@@ -294,7 +371,7 @@
         });
       }
 
-      setStatus('Đang yêu cầu quyền sử dụng camera...', '');
+      setStatus('Đang mở camera...', '');
 
       const selectedId = $('cameraSelect').value;
 
@@ -303,23 +380,8 @@
         : { facingMode:'environment' };
 
       const scanConfig = {
-        fps:12,
-        qrbox:function(width, height) {
-          const size = Math.floor(
-            Math.min(width, height) * 0.72
-          );
-
-          const finalSize = Math.max(
-            150,
-            Math.min(size, 300)
-          );
-
-          return {
-            width:finalSize,
-            height:finalSize
-          };
-        },
-        aspectRatio:1,
+        fps:18,
+        aspectRatio:1.333,
         disableFlip:false
       };
 
@@ -342,9 +404,7 @@
           throw firstError;
         }
 
-        if (selectedId) {
-          throw firstError;
-        }
+        if (selectedId) throw firstError;
 
         const available = await loadCameras();
 
@@ -352,9 +412,7 @@
           /back|rear|environment|sau/i.test(c.label || '')
         ) || available[0];
 
-        if (!back) {
-          throw firstError;
-        }
+        if (!back) throw firstError;
 
         await scanner.start(
           { deviceId:{ exact:back.id } },
@@ -370,19 +428,16 @@
 
       await loadCameras();
 
-      $('startBtn').disabled = true;
-      $('stopBtn').disabled = false;
+      updateCameraButtons();
 
       setStatus(
-        'Camera đang hoạt động. Đưa mã QR CCCD vào khung hình.',
+        'Camera đang hoạt động. Đưa toàn bộ mã QR vào khung hình.',
         ''
       );
 
     } catch (error) {
       scanning = false;
-
-      $('startBtn').disabled = false;
-      $('stopBtn').disabled = true;
+      updateCameraButtons();
 
       const name = error && error.name
         ? error.name
@@ -413,24 +468,40 @@
 
     scanning = false;
 
-    $('startBtn').disabled = false;
-    $('stopBtn').disabled = true;
+    updateCameraButtons();
 
     setStatus('Đã dừng camera.');
   }
 
+  async function stopCameraQuietly() {
+    if (!scanner || !scanning) return;
+
+    try {
+      await scanner.stop();
+    } catch (e) {}
+
+    scanning = false;
+    updateCameraButtons();
+  }
+
   async function onQrSuccess(decodedText) {
-    if (submitting) return;
+    if (submitting || processingImage) return;
 
     const id = extractId(decodedText);
 
     if (!id) {
       setStatus(
-        'Không tìm thấy số CCCD gồm 12 chữ số trong mã QR.',
+        'Đã phát hiện mã QR nhưng không tìm thấy CCCD gồm 12 chữ số.',
         'error'
       );
       return;
     }
+
+    await handleSuccess(id);
+  }
+
+  async function handleSuccess(id) {
+    if (submitting) return;
 
     submitting = true;
 
@@ -439,21 +510,299 @@
     $('manualId').value = id;
 
     setStatus(
-      'Đã quét thành công CCCD ' +
+      'ĐÃ ĐỌC THÀNH CÔNG CCCD: ' +
       id +
-      '. Đang chuyển về ứng dụng phát bằng...',
+      '\nĐang chuyển sang ứng dụng quản lý phát bằng...',
       'success'
     );
 
-    try {
-      if (scanner && scanning) {
-        await scanner.stop();
-      }
-    } catch (e) {}
-
-    scanning = false;
+    await stopCameraQuietly();
 
     sendToApp(id);
+  }
+
+  // CHỤP KHUNG HÌNH CAMERA VÀ GIẢI MÃ QR
+  async function captureAndRead() {
+    if (!scanning || processingImage || submitting) return;
+
+    const video = $('reader').querySelector('video');
+
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setStatus(
+        'Camera chưa sẵn sàng. Vui lòng đợi một chút rồi chụp lại.',
+        'error'
+      );
+      return;
+    }
+
+    processingImage = true;
+    updateCameraButtons();
+
+    setStatus(
+      'Đang chụp ảnh và nhận diện mã QR...',
+      ''
+    );
+
+    try {
+      const canvas = document.createElement('canvas');
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext('2d');
+
+      ctx.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+      await stopCameraQuietly();
+
+      await decodeCanvas(canvas, true);
+
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        'Không thể chụp ảnh camera. Vui lòng thử lại.',
+        'error'
+      );
+
+      processingImage = false;
+      updateCameraButtons();
+
+      await startScan();
+    }
+  }
+
+  // CHỌN ẢNH TỪ ĐIỆN THOẠI HOẶC MÁY TÍNH
+  function chooseImage() {
+    if (submitting || processingImage) return;
+
+    $('imageInput').click();
+  }
+
+  $('imageInput').addEventListener('change', async function(event) {
+    const file = event.target.files && event.target.files[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setStatus('Tệp đã chọn không phải là hình ảnh.', 'error');
+      event.target.value = '';
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setStatus(
+        'Ảnh quá lớn. Vui lòng chọn ảnh dưới 15 MB.',
+        'error'
+      );
+      event.target.value = '';
+      return;
+    }
+
+    if (scanning) {
+      await stopCameraQuietly();
+    }
+
+    processingImage = true;
+    updateCameraButtons();
+
+    setStatus('Đang đọc mã QR từ ảnh...', '');
+
+    try {
+      const image = new Image();
+
+      image.onload = async function() {
+        const canvas = document.createElement('canvas');
+
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+
+        const ctx = canvas.getContext('2d');
+
+        ctx.drawImage(
+          image,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+
+        URL.revokeObjectURL(image.src);
+
+        await decodeCanvas(canvas, false);
+      };
+
+      image.onerror = function() {
+        processingImage = false;
+        updateCameraButtons();
+
+        setStatus('Không thể mở ảnh đã chọn.', 'error');
+      };
+
+      image.src = URL.createObjectURL(file);
+
+    } catch (error) {
+      processingImage = false;
+      updateCameraButtons();
+
+      setStatus('Có lỗi khi xử lý ảnh.', 'error');
+      console.error(error);
+    }
+
+    event.target.value = '';
+  });
+
+  // CHUYỂN CANVAS THÀNH FILE ẢNH
+  function canvasToFile(canvas) {
+    return new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (!blob) {
+          reject(new Error('Không tạo được ảnh.'));
+          return;
+        }
+
+        const file = new File(
+          [blob],
+          'cccd-qr.jpg',
+          { type:'image/jpeg' }
+        );
+
+        resolve(file);
+
+      }, 'image/jpeg', 0.96);
+    });
+  }
+
+  // GIẢI MÃ QR TỪ ẢNH
+  async function scanImageFile(file) {
+    const imageScanner = new Html5Qrcode('imageReader', {
+      verbose:false,
+      formatsToSupport:[
+        Html5QrcodeSupportedFormats.QR_CODE
+      ]
+    });
+
+    try {
+      const result = await imageScanner.scanFile(file, false);
+      return result;
+
+    } finally {
+      try {
+        await imageScanner.clear();
+      } catch (e) {}
+    }
+  }
+
+  // THỬ ĐỌC TOÀN ẢNH, SAU ĐÓ PHÓNG TO CÁC VÙNG GIỮA
+  async function decodeCanvas(sourceCanvas, restartCamera) {
+    const attempts = [
+      { name:'Toàn bộ ảnh', x:0, y:0, w:1, h:1 },
+      { name:'Vùng giữa 80%', x:0.1, y:0.1, w:0.8, h:0.8 },
+      { name:'Vùng giữa 60%', x:0.2, y:0.2, w:0.6, h:0.6 }
+    ];
+
+    try {
+      for (let i = 0; i < attempts.length; i++) {
+        const part = attempts[i];
+
+        setStatus(
+          'Đang nhận diện QR: ' + part.name +
+          ' (' + (i + 1) + '/' + attempts.length + ')...',
+          ''
+        );
+
+        const crop = document.createElement('canvas');
+
+        const cropX = Math.floor(sourceCanvas.width * part.x);
+        const cropY = Math.floor(sourceCanvas.height * part.y);
+        const cropW = Math.floor(sourceCanvas.width * part.w);
+        const cropH = Math.floor(sourceCanvas.height * part.h);
+
+        crop.width = cropW;
+        crop.height = cropH;
+
+        const ctx = crop.getContext('2d');
+
+        ctx.drawImage(
+          sourceCanvas,
+          cropX,
+          cropY,
+          cropW,
+          cropH,
+          0,
+          0,
+          cropW,
+          cropH
+        );
+
+        const file = await canvasToFile(crop);
+
+        try {
+          const decodedText = await scanImageFile(file);
+          const id = extractId(decodedText);
+
+          if (id) {
+            processingImage = false;
+            updateCameraButtons();
+
+            await handleSuccess(id);
+            return;
+          }
+
+          if (decodedText) {
+            setStatus(
+              'Đã đọc được QR nhưng không tìm thấy số CCCD 12 chữ số.',
+              'error'
+            );
+            break;
+          }
+
+        } catch (error) {
+          console.log('Thử vùng ảnh tiếp theo:', error);
+        }
+      }
+
+      processingImage = false;
+      updateCameraButtons();
+
+      if (restartCamera && !submitting) {
+        setStatus(
+          'Chưa đọc được mã QR từ ảnh chụp.\n' +
+          'Hãy đưa CCCD gần camera hơn, tránh lóa rồi chụp lại.',
+          'error'
+        );
+
+        await startScan();
+
+      } else {
+        setStatus(
+          'Không đọc được mã QR trong ảnh.\n' +
+          'Vui lòng chọn ảnh rõ hơn, thấy đầy đủ mã QR và không bị lóa.',
+          'error'
+        );
+      }
+
+    } catch (error) {
+      console.error(error);
+
+      processingImage = false;
+      updateCameraButtons();
+
+      setStatus(
+        'Có lỗi khi giải mã ảnh. Vui lòng thử lại.',
+        'error'
+      );
+
+      if (restartCamera && !submitting) {
+        await startScan();
+      }
+    }
   }
 
   function sendToApp(id) {
@@ -461,6 +810,7 @@
 
     if (!/^\d{12}$/.test(id)) {
       submitting = false;
+
       setStatus('Số CCCD không hợp lệ.', 'error');
       return;
     }
