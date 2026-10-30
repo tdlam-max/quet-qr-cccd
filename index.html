@@ -44,13 +44,15 @@
     }
 
     #cameraPreview {
-      width:100%;
-      display:none;
-      background:#111827;
-      border-radius:12px;
-      overflow:hidden;
-    }
-
+  width: 100%;
+  max-width: 320px;
+  max-height: 240px;
+  object-fit: contain;
+  display: block;
+  margin: 10px auto;
+  border-radius: 10px;
+  background: #000;
+}
     #cameraPreview video {
       width:100%;
       display:block;
